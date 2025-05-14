@@ -146,8 +146,8 @@ norm( const std::vector<std::complex<float>> &input) {
     if( input.empty())
         return {};
     std::vector<T> output( input.size());
-    std::transform(input.begin(), input.end(), output.begin(),
-                   [](std::complex<float> c) -> T
+    std::transform( std::execution::par_unseq, input.begin(), input.end(), output.begin(),
+                   [](std::complex<float> c)
                    {return static_cast<T>( std::norm(c));});
     return output;
 }
@@ -156,8 +156,8 @@ template <typename T_in = double, typename T_out = T_in>
 void
 abs( const std::vector<T_in> &input, std::vector<T_out> &output) {
     output.resize( input.size());
-    std::transform( input.begin(), input.end(), output.begin(), [] ( T_in val)
-                   { return std::abs<T_out>( val);});
+    std::transform( std::execution::par_unseq, input.begin(), input.end(), output.begin(), 
+                    [] ( const T_in &val) { return std::abs<T_out>( val);});
 }
 
 /// @brief Berechnet den Absolutwert
@@ -167,9 +167,9 @@ template <typename T = double>
 std::vector<T> inline
 abs( const std::vector<std::complex<float>> &input) {
     std::vector<T> output(input.size());
-    std::transform(input.begin(), input.end(), output.begin(),
-                   [](std::complex<float> c) -> T
-                   {return static_cast<T>(std::abs(c));});
+    std::transform( std::execution:par_unseq, input.begin(), input.end(), output.begin(),
+                   [] (const std::complex<float> &c) 
+                   { return static_cast<T>(std::abs(c));});
     return output;
 }
 
@@ -191,9 +191,9 @@ template <typename T = std::complex<float>>
 static std::vector<T> inline
 nPow(const std::vector<T> &input, int pow = 2) {
     std::vector<T> result(input.size());
-    std::transform(input.begin(), input.end(), result.begin(),
-                   [pow](T value) -> T
-                   {return std::pow( value, pow);});
+    std::transform( std::execution::par_unseq, 
+                    input.begin(), input.end(), result.begin(),
+                    [pow]( const T &value) {return std::pow( value, pow);});
 
     return result;
 }
@@ -219,9 +219,8 @@ template <typename T = double>
 static std::vector<T>
 log10d(const std::vector<double> &input) {
     std::vector<T> output(input.size());
-    std::transform(input.begin(), input.end(), output.begin(),
-                   [](double val)
-                     {return static_cast<T>(10.0 * std::log10(val));});;
+    std::transform( std::execution::par_unseq, input.begin(), input.end(), output.begin(),
+                   []( const double &val) { return static_cast<T>( 10.0 * std::log10(val));});
     return output;
 }
 
