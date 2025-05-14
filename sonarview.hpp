@@ -269,8 +269,8 @@ class Sonarview : public QWidget{
 
         std::vector<int> tmp( input.size());
         int height = _psd->height();
-        std::transform( input.begin(), input.end(), tmp.begin(), [ height]( float val) {
-            return static_cast<int>( height * (val-15) / -45.);});
+        std::transform( std::execution::par_unseq, input.begin(), input.end(), tmp.begin(), 
+		        [ height]( float val) { return static_cast<int>( height * (val-15) / -45.);});
 
         for( uint64_t w = 0; w < tmp.size() - 1; ++w) {
             qpaint.drawLine( w, tmp.at( w), w + 1, tmp.at( w + 1));
@@ -301,7 +301,8 @@ class Sonarview : public QWidget{
         return 0;
     }
 
-    /// @brief Prozessiert Daten aus dem Puffer, so lange welche da sind
+    /// @brief processes data from _input_buf as long as there are any 
+    ///        -> wird als thread ausgef
     void process() {
         std::vector<std::complex<float>> data;
 
@@ -470,9 +471,5 @@ protected:
         }
     }
 };
-
-
-
-
 
 #endif // Sonarview_NEW_H
