@@ -167,7 +167,7 @@ template <typename T = double>
 std::vector<T> inline
 abs( const std::vector<std::complex<float>> &input) {
     std::vector<T> output(input.size());
-    std::transform( std::execution:par_unseq, input.begin(), input.end(), output.begin(),
+    std::transform( std::execution::par_unseq, input.begin(), input.end(), output.begin(),
                    [] (const std::complex<float> &c) 
                    { return static_cast<T>(std::abs(c));});
     return output;
