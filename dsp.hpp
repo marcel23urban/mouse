@@ -6,6 +6,9 @@
 #include "fft.hpp"
 #include "tools.hpp"
 
+
+
+
 /// @brief Ad-Hoc Funtion to correlate two vectors
 void crossCorrelate( const std::vector<std::complex<float>> &input_a,
                     const std::vector<std::complex<float>> &input_b,
@@ -119,7 +122,7 @@ public:
 };
 
 
-/// @brief Performes a single psd or a sums a psd to its 
+/// @brief Performes a single psd OR a sums a psd to its avg
 class Psd {
 
     FFT _fft;
@@ -138,13 +141,13 @@ public:
 		output.resize( input.size());
         _fft.fft( input, _input_fft);
 		if( log10) {
-			std::transform( std::execution::par,
+            std::transform( std::execution::par_unseq,
 						   _input_fft.begin(), _input_fft.end(),
 						   _output_psd.begin(), [] ( const auto &val)
 						   { return 10 * std::log10( std::norm( val));});
 		}
 		else {
-			std::transform( std::execution::par,
+            std::transform( std::execution::par_unseq,
 						   _input_fft.begin(), _input_fft.end(),
 						   _output_psd.begin(), [] ( const auto &val)
 						   { return std::norm( val);});
@@ -171,5 +174,82 @@ public:
 	void setLeng( uint64_t leng) { _fft.setLeng( leng);}
 };
 
+
+/// @brief LowPass Filter
+class LowPassFilter {
+    std::vector<std::complex<float>> _window;
+
+    /// @brief Berechnet ein Filterfenster wobei der erste Teil der
+    ///        Durchlassbereich, der zweite Teile der Uebergangsberich und der
+    ///        dritte Teil der Daempfungsbereich ist.
+    /// @param leng Laenge der zu filternden Signalbloecke
+    /// @param passband Durchlassbereich vor dem Uebergangsbereich
+    /// @param transition Uebergangsbereich vor dem Stopband (Steilheit des Filters)
+    /// @param stop_attenuation Daempfung des Stopbandes
+    /// @return Filterbins fuer den Frequenzbereich
+    template <typename T = std::complex<float>>
+    std::vector<T>
+    generateLowPassWindow( uint64_t leng, double passband, double transition, double stop_attenuation = -60.0)
+    {
+        transition = std::min( std::max( 1e-6, std::abs(transition)), 0.99);
+        if(leng <= 1) throw std::invalid_argument("leng <= 1");
+        if(stop_attenuation >= 1.0) throw std::invalid_argument("stop_attenuation >= 1.0");
+        double pass_factor = 1.0;
+        double stop_factor = std::pow(10.0, stop_attenuation / 10.0);
+
+        // Das Fenster wird fuer ein Seitenband berechnet und spaeter gespiegelt
+        std::vector<double> window(leng / 2, pass_factor);
+
+        uint64_t i = std::max<uint64_t>(0, static_cast<int>(std::ceil(passband * window.size())));
+        for(; i < window.size(); ++i) {
+            double x = static_cast<double>(i) / (window.size() - 1) - passband;
+            if(x > transition) { // Stopband
+                window[i] = stop_factor;
+            }
+            else { // Filterflanke
+                window[i] = (0.5 + 0.5 * std::cos(M_PI * x / transition))
+                * (pass_factor - stop_factor) + stop_factor;
+            }
+        }
+
+        std::vector<T> window_T;
+        window_T.reserve(leng);
+
+        std::transform( window.begin(), window.end(), std::back_inserter( window_T),
+                        [](double value){return static_cast<T>( value);});
+        // compensate odd leng
+        if( leng % 2) window_T.push_back(window.back());
+
+        // push back, but vise versa
+        std::transform(window.rbegin(), window.rend(), std::back_inserter(window_T),
+                       [](double value){return static_cast<T>(value);});
+
+        return window_T;
+    }
+public:
+    LowPassFilter( uint64_t leng, double stop_attenuation = -60., double rel_passband = 0.1, double rel_transition = .0) {
+        _window = generateLowPassWindow( leng, rel_passband, rel_transition, stop_attenuation);
+    }
+
+    /// @brief
+    template <typename T>
+    void apply( std::vector<T> &input) {
+        if( input.size() != _window.size())
+            throw std::runtime_error("LowPassFilter: input.size() != _window.size()");
+        std::transform( std::execution::par_unseq, input.begin(), input.end(), _window.begin(),
+                       input.begin(), std::multiplies<std::complex<float>>());
+    }
+};
+
+
+/// @brief Performs a downconversion right out of the frequency domain
+class DirectDownConverter {
+
+public:
+    DirectDownConverter() {
+
+    }
+
+};
 
 #endif // DSP_HPP
