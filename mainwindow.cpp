@@ -21,7 +21,7 @@ MainWindow::MainWindow(QWidget *parent)
     wfv->startProcessing();
     maus_gui->addStreamSink( std::bind( &Sonarview::dataIn, wfv, std::placeholders::_1));
     maus_gui->addStreamSink( std::bind( &FileWriterWidget::writeToFile, fww, std::placeholders::_1));
-    maus_gui->addStreamSink( std::bind( &UDPSenderWidget::sendData, udp, std::placeholders::_1));
+    maus_gui->addStreamSink( std::bind( &UDPSenderWidget::sendData<std::complex<float>>, udp, std::placeholders::_1));
 
     qvbl_main->addWidget( maus_gui);
     qvbl_main->addWidget( fww);
