@@ -46,15 +46,16 @@ public:
 		if( connect( _sockfd, (struct sockaddr *)&_dest_addr, sizeof( _dest_addr)) < 0) {
 			throw std::runtime_error("FEHLER UDP::connect");
 		}
-	}
+    }
 	
 	~UDPSender() {
         close(_sockfd);;
 	}
-	
-    void sendData( const std::vector<std::complex<float>> &input) {
+
+	template< typename T>
+    void sendData( const std::vector<T>> &input) {
         uint64_t cnt = 0;
-        while( cnt + max_send_bytes < input.size() * sizeof( std::complex<float>)) {
+        while( cnt + max_send_bytes < input.size() * sizeof( T)) {
             send( _sockfd, &(reinterpret_cast<const char*>( input.data()))[cnt], max_send_bytes, 0);
             cnt += max_send_bytes;
         }
@@ -62,8 +63,6 @@ public:
             send( _sockfd, &(reinterpret_cast<const char*>( input.data()))[cnt], cnt % max_send_bytes, 0);
 	}
 };
-
-
 
 // Der GUI Teil vom eientlichen UDP Vorgang entkoppelt
 class UDPSenderWidget : public QWidget {
@@ -97,9 +96,10 @@ public:
         setLayout(qhbl);
     }
 
-    void sendData( const std::vector<std::complex<float>> &input) {
+	template<typename T>
+    void sendData( const std::vector<T> &input) {
         if( startButton->isEnabled()) {return ;}
-        _udp->sendData( input);
+        _udp->sendData<T>( input);
         std::cerr << "senddata: " << input.size() << std::endl;
 
         // std::cerr << "input: " << input.size() << std::endl;
@@ -120,12 +120,10 @@ private slots:
         // Enable/disable buttons
         startButton->setEnabled(false);
         stopButton->setEnabled(true);
-
         statusLabel->setText("Status: Sending messages");
     }
 
     void stopSending() {
-
         // Enable/disable buttons
         startButton->setEnabled(true);
         stopButton->setEnabled(false);
@@ -140,7 +138,5 @@ private:
     QPushButton *stopButton;
     QLabel *statusLabel;	
 };
-
-
 
 #endif // UDPSINK_HPP
