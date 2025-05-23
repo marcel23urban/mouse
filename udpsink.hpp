@@ -53,7 +53,7 @@ public:
 	}
 
 	template< typename T>
-    void sendData( const std::vector<T>> &input) {
+    void sendData( const std::vector<T> &input) {
         uint64_t cnt = 0;
         while( cnt + max_send_bytes < input.size() * sizeof( T)) {
             send( _sockfd, &(reinterpret_cast<const char*>( input.data()))[cnt], max_send_bytes, 0);

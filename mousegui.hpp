@@ -23,6 +23,7 @@
 #include <QTextStream>
 
 #include <limits>
+#include <execution>
 
 #include "libmouse.hpp"
 
@@ -108,6 +109,8 @@ private:
             if( received != static_cast<int32_t>( in.size()))
                 std::cerr << ": received != _tmp.size() - " << received << " != " <<
                     in.size() << std::endl;
+            std::transform( std::execution::par_unseq, in.begin(), in.end(), out.begin(),
+)                           ()
             for( auto &val : in) {
                 out.push_back( std::complex<float>(
                     static_cast<float>( val.real()) * _norm,
