@@ -109,17 +109,13 @@ private:
             if( received != static_cast<int32_t>( in.size()))
                 std::cerr << ": received != _tmp.size() - " << received << " != " <<
                     in.size() << std::endl;
-            out.resize( in.size());
-            std::transform( std::execution::par_unseq, in.begin(), in.end(), out.begin(),
-                            [_norm] ( const std::complex<int16_t> &val_in, std::complex<float> &val_out)
-                            { val_out.real( _norm * static_cast<float>( val_in.real())); 
-                              val_out.imag( _norm * static_cast<float>( val_in.imag()));});
             for( auto &val : in) {
                 out.push_back( std::complex<float>(
                     static_cast<float>( val.real()) * _norm,
                     static_cast<float>( val.imag()) * _norm));
             }
             outputData( out);
+            out.clear();
         }
         std::cerr << "leaving streaming" << std::endl;
     }

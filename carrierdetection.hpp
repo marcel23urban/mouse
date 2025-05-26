@@ -9,6 +9,12 @@
 #include "fft.hpp"
 
 
+struct Peak {
+    uint64_t pos_left;
+    uint64_t pos_right;
+    float magnitude;
+};
+
 /// @brief Try to find peaks by sorting descending by magnitude while keeping index and looking
 ///        left/right for threshold (peak - left/right < 12.)-> match!
 /// @param input  floats ( i.e. PSD)
@@ -28,7 +34,7 @@ void findPeaks( const std::vector<float> &input, std::vector<std::tuple<float, u
     // check descending ordered samples for possible peaks
     for( const auto &samp : _indexed_samples) {
         bool in_free_range = true;
-        // check if already in an peak area
+        // check sample if it is in an existing peak-range
         for( const auto &peak : peaks) {
             if(    samp.first > std::get<1>( peak)
                 || samp.first < std::get<2>( peak)) {
@@ -59,19 +65,6 @@ void findPeaks( const std::vector<float> &input, std::vector<std::tuple<float, u
 /// versucht anhand Leistungsdetektion, Traeger zu erkennen.
 class CarrierDetection {
 
-    struct PEak {
-        uint64_t pos_left;
-        uint64_t pos_right;
-        float magnitude;
-    };
-
-    uint64_t _psd_leng, _psd_avg, _threshold_db;
-    Psd _psd;
-    std::vector<uint64_t> _channel_id;
-    std::vector<std::complex<float>> _fft_buffer;
-    std::vector<float> _psd_buffer;
-    uint64_t _psd_cnt;
-
 public:
     ///@brief
     /// @param psd_leng determines the fft_leng
@@ -92,15 +85,29 @@ public:
         }
     }
 
+    Peak getPeaks() {
+
+    }
+
 private:
     void checkCarrier() {
         std::vector<std::tuple<float, uint64_t, uint64_t>> peaks;
         findPeaks( _psd_buffer, peaks);
+        if( peaks.empty()) return;
+
+        for( auto peak : peaks)
+            std::cerr << std::get<>
 
         // check for previsous peaks in range and compare IDs
 
     }
 
+    uint64_t _psd_leng, _psd_avg, _threshold_db;
+    Psd _psd;
+    std::vector<uint64_t> _channel_id;
+    std::vector<std::complex<float>> _fft_buffer;
+    std::vector<float> _psd_buffer;
+    uint64_t _psd_cnt;
 };
 
 #endif // CARRIERDETECTION_HPP
