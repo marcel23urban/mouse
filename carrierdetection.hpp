@@ -4,6 +4,7 @@
 #include <vector>
 #include <complex>
 #include <execution>
+#include <chrono>
 
 #include "dsp.hpp"
 #include "fft.hpp"
@@ -13,6 +14,13 @@ struct Peak {
     uint64_t pos_left;
     uint64_t pos_right;
     float magnitude;
+};
+
+struct Carrier {
+    double rel_freq;
+    double samp_rate;
+    double band_width;
+    std::time_t start_time;
 };
 
 /// @brief Try to find peaks by sorting descending by magnitude while keeping index and looking
@@ -62,7 +70,7 @@ void findPeaks( const std::vector<float> &input, std::vector<std::tuple<float, u
 }
 
 
-/// versucht anhand Leistungsdetektion, Traeger zu erkennen.
+/// Traegerdetektion anhand Leistung.
 class CarrierDetection {
 
 public:
@@ -79,18 +87,17 @@ public:
     void push( const std::vector<std::complex<float>> &input) {
         _psd.add( input, _psd_buffer);
         if( ++_psd_cnt > 8) {
-            checkCarrier();
+            checkCarrier( _psd_buffer);
 
 
         }
     }
 
-    Peak getPeaks() {
-
-    }
+    /// @brief return Peaks if exists
+    std::vector<Peak> Peak getPeaks() const { return _peaks;}
 
 private:
-    void checkCarrier() {
+    void checkCarrier( const std::vector<float> &input) {
         std::vector<std::tuple<float, uint64_t, uint64_t>> peaks;
         findPeaks( _psd_buffer, peaks);
         if( peaks.empty()) return;
@@ -102,12 +109,29 @@ private:
 
     }
 
+    /// @brief extract time signal, therefor estimate extraction fft_leng and low-pass filter
+    void extractCarriers( std::vector<std::complex<float>> &input, const std::vector<Carrier> &carriers) {
+        // fft_leng of necessary extraction window
+        for( const Carrier &carrier : carriers) {
+            uint64_t extract_fft_leng = static_cast<double>( input.size()) * 1.25 * carrier.band_width;
+
+
+            std::iterator<uint64_t> beg = carrier.rel_freq * input.size() - std::ceil( .5 * carrier)
+        }
+
+
+
+    }
+
     uint64_t _psd_leng, _psd_avg, _threshold_db;
     Psd _psd;
     std::vector<uint64_t> _channel_id;
     std::vector<std::complex<float>> _fft_buffer;
     std::vector<float> _psd_buffer;
-    uint64_t _psd_cnt;
+    std::vector<struct Peak> _peaks;
+    uint64_t _psd_cnt, _psd_leng;
+
+    LowPassFilter _lpf;
 };
 
 #endif // CARRIERDETECTION_HPP
