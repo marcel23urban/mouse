@@ -110,13 +110,19 @@ private:
     }
 
     /// @brief extract time signal, therefor estimate extraction fft_leng and low-pass filter
-    void extractCarriers( std::vector<std::complex<float>> &input, const std::vector<Carrier> &carriers) {
-        // fft_leng of necessary extraction window
-        for( const Carrier &carrier : carriers) {
-            uint64_t extract_fft_leng = static_cast<double>( input.size()) * 1.25 * carrier.band_width;
+    void extractCarriers( std::vector<std::complex<float>> &input, const std::vector<Carrier> &carriers, uint64_t rel_invers_overlap) {
 
+		const uint64_t fft_leng = input.size();
+        for( const Carrier &carrier : carriers) {
+			// estimate fft_leng of necessary extraction window
+            uint64_t extract_fft_leng = Tools::nextPow2( std::ceil( static_cast<double>( fft_leng) * 1.25 * carrier.band_width * 2.));
+			while( extract_fft_leng < fft_leng) && fft_leng % extract_fft_leng != 0 && fft_leng % rel_invers_overlap != 0)
+				++extract_fft_leng;
+			double rel_extraction_samp_rate = static_cast<double>( extract_fft_leng) / static_cast<double>( fft_leng);
 
             std::iterator<uint64_t> beg = carrier.rel_freq * input.size() - std::ceil( .5 * carrier)
+			FFT fft( extract_fft_leng);
+			
         }
 
 
