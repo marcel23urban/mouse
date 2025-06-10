@@ -241,15 +241,4 @@ public:
     }
 };
 
-
-/// @brief Performs a downconversion right out of the frequency domain
-class DirectDownConverter {
-
-public:
-    DirectDownConverter() {
-
-    }
-
-};
-
 #endif // DSP_HPP
