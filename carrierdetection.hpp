@@ -94,7 +94,7 @@ public:
     }
 
     /// @brief return Peaks if exists
-    std::vector<Peak> Peak getPeaks() const { return _peaks;}
+    std::vector<Peak> getPeaks() const { return _peaks;}
 
 private:
     void checkCarrier( const std::vector<float> &input) {
@@ -102,8 +102,8 @@ private:
         findPeaks( _psd_buffer, peaks);
         if( peaks.empty()) return;
 
-        for( auto peak : peaks)
-            std::cerr << std::get<>
+        // for( auto peak : peaks)
+        //     std::cerr << std::get<>
 
         // check for previsous peaks in range and compare IDs
 
@@ -120,7 +120,7 @@ private:
 				++extract_fft_leng;
 			double rel_extraction_samp_rate = static_cast<double>( extract_fft_leng) / static_cast<double>( fft_leng);
 
-            std::iterator<uint64_t> beg = carrier.rel_freq * input.size() - std::ceil( .5 * carrier)
+//            std::iterator<uint64_t> beg = carrier.rel_freq * input.size() - std::ceil( .5 * carrier)
 			FFT fft( extract_fft_leng);
 			
         }
@@ -129,13 +129,12 @@ private:
 
     }
 
-    uint64_t _psd_leng, _psd_avg, _threshold_db;
+    uint64_t _psd_cnt, _psd_leng, _psd_avg, _threshold_db;
     Psd _psd;
     std::vector<uint64_t> _channel_id;
     std::vector<std::complex<float>> _fft_buffer;
     std::vector<float> _psd_buffer;
     std::vector<struct Peak> _peaks;
-    uint64_t _psd_cnt, _psd_leng;
 
     LowPassFilter _lpf;
 };
