@@ -6,7 +6,7 @@ project(MyQtProject VERSION 1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(CMAKE_PREFIX_PATH "/home/hans/Qt/6.5.3/gcc_64/lib/cmake")
+#set(CMAKE_PREFIX_PATH "/home/hans/Qt/6.8.1/gcc_64/lib/cmake")
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
