@@ -45,7 +45,7 @@ public:
         infoLabel = new QLabel("Dauer: 0:00:00 | Größe: 0.000 GB", this);
 
         _append_mode = new QCheckBox;
-        _append_mode->setText( "Anfügen");
+        _append_mode->setText( "anfügen (sonst überschreiben)");
 
         timer = new QTimer(this);
         connect(timer, &QTimer::timeout, this, &FileWriterWidget::updateInfo);
