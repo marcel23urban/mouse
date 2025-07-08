@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(MyQtProject VERSION 1.0 LANGUAGES CXX)
+project(mouse VERSION 1.0 LANGUAGES CXX)
 
 # Enable C++17
 set(CMAKE_CXX_STANDARD 17)
@@ -35,7 +35,8 @@ set(HEADERS
 )
 
 # Create the executable
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS}
+    peakdetection.hpp)
 
 # Include Qt headers
 target_link_libraries(${PROJECT_NAME}
