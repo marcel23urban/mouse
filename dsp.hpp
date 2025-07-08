@@ -231,6 +231,8 @@ public:
         _window = generateLowPassWindow( leng, rel_passband, rel_transition, stop_attenuation);
     }
 
+    LowPassFilter() = default;
+
     /// @brief
     template <typename T>
     void apply( std::vector<T> &input) {
