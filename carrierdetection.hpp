@@ -6,25 +6,30 @@
 #include <execution>
 #include <chrono>
 
-#include "conditionalsafequeue.hpp"
+// provides Interface
+#include "baseprocessor.hpp"
+
 #include "dsp.hpp"
 #include "fft.hpp"
+#include "fftwindows.hpp"
 #include "peakdetection.hpp"
 
 
 /// @brief holds one signal and its metadata
 struct Carrier {
-    double origin_freq;
-    double samp_rate;
-    double band_width;
+    double origin_freq;     // [Hz]
+    double rel_freq;        // bins
+    double samp_rate;       // [HZ]
+    double band_width;      // [Hz]
+    double rel_band_width;  // bins
     std::time_t start_time;
-    std::vector<std::complex<float>> buffer;
+    std::vector<std::complex<float>> samples;
 };
 
 
 
 /// Carrierdetection .
-class CarrierDetection {
+class CarrierDetection : public BaseProcessor {
 
 public:
     ///@brief
@@ -33,7 +38,7 @@ public:
     /// @param threshold_db peak over sourounding area
     CarrierDetection( uint64_t psd_leng, uint64_t psd_avg, uint64_t threshold_db = 6.)
         : _psd_leng( psd_leng), _psd_avg( psd_avg),  _threshold_db( threshold_db), _psd_cnt( 0){
-        _psd.setLeng( _psd_leng);
+        _fft.setLeng( psd_leng);
 
     }
 
@@ -43,49 +48,70 @@ public:
     }
 
     /// @brief return Peaks if exists
-    std::vector<Peak> getPeaks() const { return _peaks;}
+    std::vector<Carrier> getPeaks() const { return _carriers;}
 
 private:
-    // poll input_buffer, add to sample_buffer, consume as long as...
-    void process() {
-        std::vector<std::complex<float>> data( _fft.leng()), fft( _fft.leng());
-        std::vector<float> psd( _fft.leng());
+    /// @brief Daten fft transformieren, jeweils für die Leistungsanalyse
+    ///        und für die Extraktion
+    void process( const std::vector<std::complex<float>> &data) override {
+        // append to logical structure
+        _buffer.insert( _buffer.end(), data.begin(), data.end());
 
-        while( _is_processing) {
-            // pull samples from receive buffer
-            _puff.try_pop( data);
-            // append to logical structure
-            _samples.insert( _samples.end(), data.begin(), data.end());
-            data.clear();
+        uint64_t buffer_consumed = 0;
+        while(( _buffer.size() - buffer_consumed) >= _fft.leng()) {
+            _win.vonHannWindow( _buffer.data() + buffer_consumed, _buffer_fft.data(), _fft.leng());
+            _fft.fft(_buffer_fft, _buffer_fft);
 
-            uint64_t consumed_samples = 0;
-            while(( _samples.size() - consumed_samples) >= _fft.leng()) {
-                _fft.fft( _samples.data() + consumed_samples, fft.data());
+            std::transform( std::execution::par_unseq, _buffer_fft.begin(),
+                            _buffer_fft.end(), _buffer_psd.begin(), []( const std::complex<float> &samp)
+                           { return std::real( std::norm( samp));});
 
-                std::transform( std::execution::par_unseq, fft.begin(), fft.end(),
-                               psd.begin(), []( const std::complex<float> &samp)
-                               { return std::real( std::norm( samp));});
-
-                checkCarrier( psd);
-                consumed_samples += _overl_step;
-            }
-            // discard all consumed samples
-            _samples.erase( _samples.begin(), _samples.begin() + consumed_samples);
-
-            c
+            checkCarrier( _buffer_psd);
+            buffer_consumed += _overl_step;
         }
+        // discard all consumed samples
+        _buffer.erase( _buffer.begin(), _buffer.begin() + buffer_consumed);
     }
 
+    /// @brief Check Power Spectral Densitity for potential Carriers and note
+    /// @param input PSD Vector
     void checkCarrier( const std::vector<float> &input) {
-        std::vector<std::tuple<float, uint64_t, uint64_t>> peaks;
-        findPeaks( _psd_buffer, peaks);
+        std::vector<Peak> peaks;
+        findPeaks( _buffer_psd, peaks);
         if( peaks.empty()) return;
 
-        // for( auto peak : peaks)
-        //     std::cerr << std::get<>
+        for( auto peak : peaks)
+            addToCarriers( peak);
 
         // check for previsous peaks in range and compare IDs
 
+    }
+
+    /// @brief Check if peak-pos and peak-bw already exists
+    void addToCarriers( const Carrier signal) {
+        for( auto &carrier : _carriers) {
+            if(    signal.rel_band_width < carrier.rel_band_width * 1.1
+                && signal.rel_band_width < carrier.rel_band_width * .9) {
+
+                std::cerr << signal.rel_band_width << " :: " << carrier.rel_band_width << std::endl;
+
+                if(    signal.rel_freq < carrier.rel_freq + carrier.rel_band_width * .1
+                    && signal.rel_freq > carrier.rel_freq - carrier.rel_band_width * .1) {
+                    std::cerr << signal.rel_freq << " :: " << carrier.rel_freq << std::endl;
+
+                    // already existing carrier - only add samples
+                    carrier.samples.insert( carrier.samples.end(),
+                                   signal.samples.begin(), signal.samples.end());
+                    std::cerr << "found corresponding carrier !" << std::endl;
+                    return;
+                }
+
+                else if(    signal.rel_freq < carrier.rel_freq + carrier.rel_band_width * .5
+                         && signal.rel_freq > carrier.rel_freq - carrier.rel_band_width * .5)
+                    std::cerr << "!!! Something curious carrier on carrier detection" << std::endl;
+            }
+
+        }
     }
 
     /// @brief extract time signal, therefor estimate extraction fft_leng and low-pass filter
@@ -105,25 +131,20 @@ private:
             FFT fft( extract_fft_leng);
 
         }
-
-
-
     }
-
 
     uint64_t _psd_cnt, _psd_leng, _psd_avg, _threshold_db, _rel_inv_overl,
         _overl_step;
 
-    uint64_t _psd_cnt, _psd_leng, _psd_avg, _threshold_db;
-    Psd _psd;
     std::vector<uint64_t> _channel_id;
-    std::vector<std::complex<float>> _samples;
-    std::vector<float> _psd_buffer;
-    std::vector<struct Peak> _peaks;
+    std::vector<std::complex<float>> _buffer, _buffer_fft;
+    std::vector<float> _buffer_psd;
+    std::vector<struct Carrier> _carriers;
     std::atomic_bool _is_processing;
     ConditionSafeQueue<std::complex<float>> _puff;
 
     FFT _fft;
+    FFTWindow _win;
     LowPassFilter _lpf;
 };
 
