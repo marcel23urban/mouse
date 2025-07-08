@@ -14,8 +14,8 @@
 #define DEBUG_FUNCTION_CALL
 #endif
 
-class Mouse
-{
+class Mouse {
+
 mutable std::mutex _mutexer;
 
 enum
@@ -74,35 +74,10 @@ std::string _error = {};
 bool _mouse_is_receiver;
 bool _is_open;
 
-///// @brief Bettet ein Kommando in einen libusb_bulk_transfer ein und wertet den
-/////        return-Wert aus
-//void
-//writeCommand(unsigned char command)
-//{
-//    std::vector<unsigned char> data_buffer(CMD_TRANSFER_SIZE); /* nimmt die Bytes auf  */
-//    data_buffer[0] = command;
-//    int32_t return_value = 0,
-//            transfered   = 0;
-
-//    std::lock_guard<std::mutex> lock( _mutexer);
-//    /* Es folgt der eigentliche Sendevorgang.  */
-//    return_value = libusb_bulk_transfer(_mouse_dev,
-//                                        ENDPOINT_1_OUT,
-//                                        data_buffer.data(),
-//                                        1,
-//                                        &transfered,
-//                                        100);
-
-//    /* Rueckgabewert ungleich NULL war nicht erfolgreich.  */
-//    if(return_value)
-//        throw std::runtime_error("FEHLER libmouse::writeCommand() "
-//                                + std::string(libusb_error_name(return_value)));
-//}
 /// @brief Bettet ein Kommando in einen libusb_bulk_transfer ein und wertet den
 ///        return-Wert aus
 std::vector<unsigned char>
-writeCommand(unsigned char command)
-{
+writeCommand( const unsigned char command) {
     std::vector<unsigned char> data_buffer(CMD_TRANSFER_SIZE); /* nimmt die Bytes auf  */
     data_buffer[0] = command;
     int32_t return_value = 0,
@@ -304,7 +279,6 @@ i2cReadData( unsigned char *data, uint64_t leng) {
     if(return_value)
         throw std::runtime_error("FEHLER libmouse::i2cReadData()"
                                + std::string( libusb_error_name(return_value)));
-
 
     /* Rueckgabewert im Puffer auf Fehler in der Uebrtragung pruefen.  */
     if(data_buffer[2] == I2C_ERROR) {
@@ -518,11 +492,6 @@ setCenterFrequency(int32_t frequency) {
     freq.push_back(frequency >> 16);
     freq.push_back(frequency >> 24);
 
-//    freq.push_back(frequency >> 24);
-//    freq.push_back(frequency >> 16);
-//    freq.push_back(frequency >> 8);
-//    freq.push_back(frequency);
-
     // Frequenzabhaengige Empfangsbausteine beachten ( < 40MHz / >= 40 MHz)
     if( frequency > 40e6) {
         if( _mouse_is_receiver) {
@@ -582,13 +551,14 @@ i2cReadFilter(void) {
     return output;
 }
 
+// 
 void setGPIFMode() { writeCommand(CMD_GPIF_MODE); }
 void setIDLEMode() { writeCommand(CMD_IDLE_MODE); }
 void setSLAVEMode(){ writeCommand(CMD_SLAVE_MODE); }
 void setFIFOFlush(void) {writeCommand(CMD_SET_FIFO_FLUSH); }
 
 
-/// @brief Diese FUNKTION ist zum Daten abholen, diese kommen im INT16 Format!!
+/// @brief Diese FUNKTION dient als callback, um Daten ab zu abholen [INT16, interleaved, also complex]!!
 /// @param output int16
 /// @return Anzahl gelesener Bytes
 int32_t
@@ -618,7 +588,7 @@ streamData( std::vector<std::complex<int16_t>> &output) {
 
 /// @brief Gibt den index des MOUSE-Modi zurueck
 /// @return 1: CMD_IDLE, 2: CMD_GPIF
-unsigned char getCurrentMode() { return writeCommand( CMD_GET_MODE).at( 1);}
+unsigned char getCurrentMode() const { return writeCommand( CMD_GET_MODE).at( 1);}
 
 };
 
