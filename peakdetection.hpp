@@ -20,7 +20,9 @@ struct Peak {
 /// @param peaks output tuple of peaks <mag, left, right>
 /// @param threshold difference peak and left/rigth in dB
 /// @param stepping left right going for check threshold
-void findPeaks( const std::vector<float> &input, std::vector<std::tuple<float, uint64_t, uint64_t>> &peaks, float threshold = 12., uint64_t stepping = 1) {
+void findPeaks( const std::vector<float> &input,
+               std::vector< Peak> &peaks,
+               float threshold = 12., uint64_t stepping = 1) {
     std::vector<std::pair<uint64_t, float>> _indexed_samples( input.size());
     float avg = std::accumulate( input.begin(), input.end(), .0);
     avg /= input.size();
@@ -35,8 +37,8 @@ void findPeaks( const std::vector<float> &input, std::vector<std::tuple<float, u
         bool in_free_range = true;
         // check sample if it is in an existing peak-range
         for( const auto &peak : peaks) {
-            if(    samp.first > std::get<1>( peak)
-                || samp.first < std::get<2>( peak)) {
+            if(    samp.first > peak.pos_left
+                || samp.first < peak.pos_right) {
                 in_free_range = false;
                 break;
             }
@@ -52,7 +54,6 @@ void findPeaks( const std::vector<float> &input, std::vector<std::tuple<float, u
             // check if threshold reached
             if(    ( mag - input.at( pos + w)) > threshold
                 || ( mag - input.at( pos - w)) > threshold) {
-
                 peaks.emplace_back( mag, pos - w, pos + w);
                 break;
             }
