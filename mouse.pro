@@ -13,12 +13,14 @@ SOURCES += \
     main.cpp \
     mainwindow.cpp
 HEADERS += \
+    baseprocessor.hpp \
     carrierdetection.hpp \
     dsp.hpp \
     fft.hpp \
     filesink.hpp \
     mainwindow.h \
     mousegui.hpp \
+    peakdetection.hpp \
     processor_base.hpp \
     sonarview.hpp \
     libmouse.hpp \
