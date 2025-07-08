@@ -168,7 +168,7 @@ public:
     //    }
 
     /// @brief: Kopiert Daten auf die _queue und loescht, sobald limit erreicht
-	/// @param blocking true: waits, until queue is capable, false: discard if queue full 
+    /// @param blocking true: waits, until queue is capable, false: discard if queue full
     bool push( std::vector<T> input, bool blocking = true) {
 		if( _reject_input) return false;
         std::unique_lock<std::mutex> lock( _mutexer);
