@@ -588,7 +588,7 @@ streamData( std::vector<std::complex<int16_t>> &output) {
 
 /// @brief Gibt den index des MOUSE-Modi zurueck
 /// @return 1: CMD_IDLE, 2: CMD_GPIF
-unsigned char getCurrentMode() const { return writeCommand( CMD_GET_MODE).at( 1);}
+unsigned char getCurrentMode() { return writeCommand( CMD_GET_MODE).at( 1);}
 
 };
 
