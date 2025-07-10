@@ -20,8 +20,7 @@ struct Peak {
 /// @param peaks output tuple of peaks <mag, left, right>
 /// @param threshold difference peak and left/rigth in dB
 /// @param stepping left right going for check threshold
-void findPeaks( const std::vector<float> &input,
-               std::vector< Peak> &peaks,
+void findPeaks( const std::vector<float> &input, std::vector< Peak> &peaks,
                float threshold = 12., uint64_t stepping = 1) {
     std::vector<std::pair<uint64_t, float>> _indexed_samples( input.size());
     float avg = std::accumulate( input.begin(), input.end(), .0);
