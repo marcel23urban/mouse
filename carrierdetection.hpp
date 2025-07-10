@@ -114,11 +114,14 @@ private:
         }
     }
 
-    /// @brief extract time signal, therefor estimate extraction fft_leng and low-pass filter
-    void extractCarriers( std::vector<std::complex<float>> &input, const std::vector<Carrier> &carriers, uint64_t rel_invers_overlap) {
-
+    /// @brief extract time signal from detected peaks, therefor estimate extraction fft_leng and low-pass filter
+    std::vector<Carrier>
+    extractCarriers( std::vector<std::complex<float>> &input,
+                     const std::vector<Peak> &peaks, uint64_t rel_invers_overlap) {
+        std::vector<Carrier> carriers;
+        carriers.resize( peaks.size());
         const uint64_t fft_leng = input.size();
-        for( const Carrier &carrier : carriers) {
+        for( const Peak &pk : peaks) {
             // estimate extract_fft_leng of necessary extraction window with the following requirements
             // - rel_inverse_overlap is divider,
             uint64_t extract_fft_leng = Tools::nextPow2( std::ceil( static_cast<double>( fft_leng) * 1.25 * carrier.band_width * 2.));
