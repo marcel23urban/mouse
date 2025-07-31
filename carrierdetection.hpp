@@ -75,20 +75,25 @@ private:
 
     /// @brief Check Power Spectral Densitity for potential Carriers and note
     /// @param input PSD Vector
-    void checkCarrier( const std::vector<float> &input) {
+    std::vector<Peak> checkCarrier( const std::vector<float> &input) {
+        // find peaks in PSD
         std::vector<Peak> peaks;
         findPeaks( _buffer_psd, peaks);
-        if( peaks.empty()) return;
 
-        for( auto peak : peaks)
-            addToCarriers( peak);
+        // extract peaks as carriers
+        std::vector<Carrier> carriers;
+        carriers = extractCarriers( input, peaks);
+
+
+        for( auto &carrier : carriers)
+            checkCarrierIdent( carrier);
 
         // check for previsous peaks in range and compare IDs
 
     }
 
     /// @brief Check if peak-pos and peak-bw already exists
-    void addToCarriers( const Carrier signal) {
+    void checkCarrierIdent( const Carrier signal) {
         for( auto &carrier : _carriers) {
             if(    signal.rel_band_width < carrier.rel_band_width * 1.1
                 && signal.rel_band_width < carrier.rel_band_width * .9) {
@@ -115,9 +120,12 @@ private:
     }
 
     /// @brief extract time signal from detected peaks, therefor estimate extraction fft_leng and low-pass filter
+    /// @param input frequency vector
+    /// @param peaks to corresponding frequency vector
+    /// @return Carriers same leng as peaks
     std::vector<Carrier>
     extractCarriers( std::vector<std::complex<float>> &input,
-                     const std::vector<Peak> &peaks, uint64_t rel_invers_overlap) {
+                     const std::vector<Peak> &peaks, uint64_t rel_invers_overlap = 4) {
         std::vector<Carrier> carriers;
         carriers.resize( peaks.size());
         const uint64_t fft_leng = input.size();
