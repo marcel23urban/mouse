@@ -1,5 +1,5 @@
-#ifndef CARRIERDETECTION_HPP
-#define CARRIERDETECTION_HPP
+#ifndef CARRIERPROCESSING_H
+#define CARRIERPROCESSING_H
 
 #include <vector>
 #include <complex>
@@ -13,6 +13,10 @@
 #include "fft.hpp"
 #include "fftwindows.hpp"
 #include "peakdetection.hpp"
+
+#ifndef DEBUG
+#define DEBUG
+#endif
 
 
 /// @brief holds one signal and its metadata
@@ -28,7 +32,8 @@ struct Carrier {
 
 
 
-/// Carrierdetection .
+/// @brief Carrierdetection inherits from threaded BaseProcessor
+///        ongoing in function process()
 class CarrierDetection : public BaseProcessor {
 
 public:
@@ -39,7 +44,6 @@ public:
     CarrierDetection( uint64_t psd_leng, uint64_t psd_avg, uint64_t threshold_db = 6.)
         : _psd_leng( psd_leng), _psd_avg( psd_avg),  _threshold_db( threshold_db), _psd_cnt( 0){
         _fft.setLeng( psd_leng);
-
     }
 
     // @brief add Data to internal buffer and starts detection
@@ -51,49 +55,45 @@ public:
     std::vector<Carrier> getPeaks() const { return _carriers;}
 
 private:
-    /// @brief Daten fft transformieren, jeweils für die Leistungsanalyse
+    /// @brief Verarbeitet Daten aus dem Puffer _puff:
+    ///        fft transformieren, jeweils für die Leistungsanalyse
     ///        und für die Extraktion
     void process( const std::vector<std::complex<float>> &data) override {
         // append to logical structure
         _buffer.insert( _buffer.end(), data.begin(), data.end());
 
         uint64_t buffer_consumed = 0;
-        while(( _buffer.size() - buffer_consumed) >= _fft.leng()) {
+        while( _buffer.size() - buffer_consumed >= _fft.leng()) {
             _win.vonHannWindow( _buffer.data() + buffer_consumed, _buffer_fft.data(), _fft.leng());
             _fft.fft(_buffer_fft, _buffer_fft);
 
             std::transform( std::execution::par_unseq, _buffer_fft.begin(),
-                            _buffer_fft.end(), _buffer_psd.begin(), []( const std::complex<float> &samp)
-                           { return std::real( std::norm( samp));});
+                            _buffer_fft.end(), _buffer_psd.begin(),
+                            []( const std::complex<float> &samp)
+                            { return std::real( std::norm( samp));});
 
-            checkCarrier( _buffer_psd);
+            std::vector<Peak> peaks;
+            findPeaks( _buffer_psd, peaks);
+#ifdef DEBUG
+            std::cerr << "Peaks found: " << peaks.size() << std::endl;
+#endif
+            // extract peaks as carriers
+            std::vector<Carrier> carriers;
+            carriers = extractCarriers( _buffer_fft, peaks);
+
+            // check for previsous peaks in range and compare IDs
+            for( auto &carrier : carriers)
+                checkForCarriersIdent( carrier);
+
             buffer_consumed += _overl_step;
         }
         // discard all consumed samples
         _buffer.erase( _buffer.begin(), _buffer.begin() + buffer_consumed);
     }
 
-    /// @brief Check Power Spectral Densitity for potential Carriers and note
-    /// @param input PSD Vector
-    std::vector<Peak> checkCarrier( const std::vector<float> &input) {
-        // find peaks in PSD
-        std::vector<Peak> peaks;
-        findPeaks( _buffer_psd, peaks);
-
-        // extract peaks as carriers
-        std::vector<Carrier> carriers;
-        carriers = extractCarriers( input, peaks);
-
-
-        for( auto &carrier : carriers)
-            checkCarrierIdent( carrier);
-
-        // check for previsous peaks in range and compare IDs
-
-    }
 
     /// @brief Check if peak-pos and peak-bw already exists
-    void checkCarrierIdent( const Carrier signal) {
+    void checkForCarriersIdent( const Carrier signal) {
         for( auto &carrier : _carriers) {
             if(    signal.rel_band_width < carrier.rel_band_width * 1.1
                 && signal.rel_band_width < carrier.rel_band_width * .9) {
@@ -159,4 +159,4 @@ private:
     LowPassFilter _lpf;
 };
 
-#endif // CARRIERDETECTION_HPP
+#endif // CARRIERPROCESSING_H
