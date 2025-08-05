@@ -14,7 +14,7 @@ SOURCES += \
     mainwindow.cpp
 HEADERS += \
     baseprocessor.hpp \
-    carrierdetection.hpp \
+    carrierprocessing.hpp \
     dsp.hpp \
     fft.hpp \
     filesink.hpp \
