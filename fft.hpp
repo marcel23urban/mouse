@@ -16,11 +16,13 @@ public:
         setLeng( leng);
     }
 
+    /// @brief return current fft length
     uint64_t leng() const { return _shape.at(0);}
-    bool setLeng( uint64_t leng) {
+
+    /// @brief set new fft length
+    void setLeng( uint64_t leng) {
         if( leng < 2) throw std::invalid_argument("FEHLER fft leng < 2");
         _shape = { leng};
-        return true;
     }
 
     void fft( const std::complex<float> *input, std::complex<float> *output) {
@@ -44,19 +46,17 @@ public:
 
     /// @brief performs complex<float> to complex<float> reverse-fft
     /// @param input data of exact leng samples
-    /// @param output fft from input leng
+    /// @param output fft with input leng
     void ifft( const std::complex<float> *input, std::complex<float> *output) {
         pocketfft::c2c<float>( _shape, stride_in, stride_out, axes, pocketfft::BACKWARD,
                               input, output, 1. / static_cast<double>( leng));
     }
     /// @brief performs complex<float> to complex<float> reverse-fft
     /// @param input data of exact leng samples
-    /// @param output fft from input leng
+    /// @param output fft with input leng
     void ifft( const std::vector<std::complex<float>> &input, std::vector<std::complex<float>> &output) {
         ifft( input.data(), output.data());
     }
-
-
 };
 
 #endif // FFT_HPP
