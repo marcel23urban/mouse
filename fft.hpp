@@ -33,9 +33,9 @@ public:
         fft( input.data(), output.data());
     }
 
-    /// @brief Computes vector of floats to its complex frequency domain
+    /// @brief Computes vector of floats to its complex frequency domain, just one dimensional
     void fft( const float *input, std::complex<float> *output) {
-        pocketfft::r2c<flaot>( _shape, stride_in, stride_out, 0, pocketfft::FORWARD, input, output, 1.);
+        pocketfft::r2c<flaot>( _shape, stride_in, stride_out, 1, pocketfft::FORWARD, input, output, 1.);
     }
     /// @brief Computes vector of floats to its complex frequency domain
     void fft( const std::vector<float> &input, std::vector<std::complex<float>> &output) {
