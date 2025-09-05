@@ -55,22 +55,20 @@ public:
     std::vector<Carrier> getPeaks() const { return _carriers;}
 
 private:
-    /// @brief Verarbeitet Daten aus dem Puffer _puff:
-    ///        fft transformieren, jeweils für die Leistungsanalyse
-    ///        und für die Extraktion
+    /// @brief  Processes data from _puff: windowin, psd based peak detection, consecutive
+    ///         channelizing via suiteable iffts
     void process( const std::vector<std::complex<float>> &data) override {
         // append to logical structure
         _buffer.insert( _buffer.end(), data.begin(), data.end());
 
-        uint64_t buffer_consumed = 0;
+        uint64_t buffer_consumed = 0; // increased at the bottom
         while( _buffer.size() - buffer_consumed >= _fft.leng()) {
-            _win.vonHannWindow( _buffer.data() + buffer_consumed, _buffer_fft.data(), _fft.leng());
-            _fft.fft(_buffer_fft, _buffer_fft);
-
+            _win.vonHannWindow( _buffer.data() + buffer_consumed, _buffer_win.data(), _fft.leng());
+            _fft.fft(_buffer_win, _buffer_fft);
             std::transform( std::execution::par_unseq, _buffer_fft.begin(),
                             _buffer_fft.end(), _buffer_psd.begin(),
                             []( const std::complex<float> &samp)
-                            { return std::real( std::norm( samp));});
+                            { return std::norm( samp);});
 
             std::vector<Peak> peaks;
             findPeaks( _buffer_psd, peaks);
@@ -85,6 +83,7 @@ private:
             for( auto &carrier : carriers)
                 checkForCarriersIdent( carrier);
 
+            // step just appart of the ft size ahead to prevent side effects
             buffer_consumed += _overl_step;
         }
         // discard all consumed samples
@@ -148,7 +147,7 @@ private:
         _overl_step;
 
     std::vector<uint64_t> _channel_id;
-    std::vector<std::complex<float>> _buffer, _buffer_fft;
+    std::vector<std::complex<float>> _buffer, _buffer_win, _buffer_fft;
     std::vector<float> _buffer_psd;
     std::vector<struct Carrier> _carriers;
     std::atomic_bool _is_processing;
