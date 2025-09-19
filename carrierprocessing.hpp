@@ -79,11 +79,11 @@ private:
             std::vector<Carrier> carriers;
             carriers = extractCarriers( _buffer_fft, peaks);
 
-            // check for previsous peaks in range and compare IDs
+            // check for previsous carriers in range and append if match 
             for( auto &carrier : carriers)
                 checkForCarriersIdent( carrier);
 
-            // step just appart of the ft size ahead to prevent side effects
+            // overlapped: step just a part of the fft size forward to prevent side effects
             buffer_consumed += _overl_step;
         }
         // discard all consumed samples
@@ -119,16 +119,18 @@ private:
     }
 
     /// @brief extract time signal from detected peaks, therefor estimate extraction fft_leng and low-pass filter
-    /// @param input frequency vector
+    /// @param input fft vector
     /// @param peaks to corresponding frequency vector
     /// @return Carriers same leng as peaks
     std::vector<Carrier>
     extractCarriers( std::vector<std::complex<float>> &input,
                      const std::vector<Peak> &peaks, uint64_t rel_invers_overlap = 4) {
         std::vector<Carrier> carriers;
-        carriers.resize( peaks.size());
+        carriers.reserve( peaks.size());
         const uint64_t fft_leng = input.size();
         for( const Peak &pk : peaks) {
+			Carrier car;
+			
             // estimate extract_fft_leng of necessary extraction window with the following requirements
             // - rel_inverse_overlap is divider,
             uint64_t extract_fft_leng = Tools::nextPow2( std::ceil( static_cast<double>( fft_leng) * 1.25 * carrier.band_width * 2.));
@@ -138,9 +140,17 @@ private:
             double rel_extraction_samp_rate = static_cast<double>( extract_fft_leng) / static_cast<double>( fft_leng);
 
             //            std::iterator<uint64_t> beg = carrier.rel_freq * input.size() - std::ceil( .5 * carrier)
-            FFT fft( extract_fft_leng);
-
+            
+			// try to avoid next two line by indexing directly
+			std::vector<std::complex<float>> time_chunk( extract_fft_leng);
+			//std::copy( input.begin() + pk.pos_left, input.begin() + pk.pos.right, frequency_chunk.begin());
+			FFT fft( extract_fft_leng);
+			fft.fft( input.begin() + pk.pos_left, time_chunk.begin());
+			car.samples.insert( car.samples.end(), time_chunk.begin(), time_chunk.end());
+			carriers.push_back( car)
         }
+		
+		return carriers;
     }
 
     uint64_t _psd_cnt, _psd_leng, _psd_avg, _threshold_db, _rel_inv_overl,
