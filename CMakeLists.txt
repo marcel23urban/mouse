@@ -22,7 +22,7 @@ set(SOURCES
 )
 
 set(HEADERS
-    carrierdetection.hpp
+    carrierprocessing.hpp
     dsp.hpp
     fft.hpp
     filesink.hpp
