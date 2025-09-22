@@ -26,7 +26,7 @@ struct Carrier {
     double samp_rate;       // [HZ]
     double band_width;      // [Hz]
     double rel_band_width;  // bins
-    std::time_t start_time;
+    std::chrono::system_clock::time_point start_time;
     std::vector<std::complex<float>> samples;
 };
 
@@ -91,7 +91,7 @@ private:
     }
 
 
-    /// @brief Check if peak-pos and peak-bw already exists
+    /// @brief Check if peak-pos and peak-bw allready exists
     void checkForCarriersIdent( const Carrier signal) {
         for( auto &carrier : _carriers) {
             if(    signal.rel_band_width < carrier.rel_band_width * 1.1
@@ -118,7 +118,8 @@ private:
         }
     }
 
-    /// @brief extract time signal from detected peaks, therefor estimate extraction fft_leng and low-pass filter
+    /// @brief extract time signal from given frequency vector, therefor estimate
+    /// extraction fft_leng and low-pass filter through detected peaks
     /// @param input fft vector
     /// @param peaks to corresponding frequency vector
     /// @return Carriers same leng as peaks
@@ -130,10 +131,13 @@ private:
         const uint64_t fft_leng = input.size();
         for( const Peak &pk : peaks) {
 			Carrier car;
-			
+            // car.rel_freq =
+            // car.rel_band_width =
+            car.start_time = std::chrono::system_clock::now();
+
             // estimate extract_fft_leng of necessary extraction window with the following requirements
             // - rel_inverse_overlap is divider,
-            uint64_t extract_fft_leng = Tools::nextPow2( std::ceil( static_cast<double>( fft_leng) * 1.25 * carrier.band_width * 2.));
+            uint64_t extract_fft_leng = Tools::nextPow2( std::ceil( static_cast<double>( fft_leng) * 1.25 * car.band_width * 2.));
             while( extract_fft_leng < fft_leng && fft_leng % extract_fft_leng != 0 && fft_leng % rel_invers_overlap != 0) {
                 ++extract_fft_leng;
             }
@@ -145,9 +149,9 @@ private:
 			std::vector<std::complex<float>> time_chunk( extract_fft_leng);
 			//std::copy( input.begin() + pk.pos_left, input.begin() + pk.pos.right, frequency_chunk.begin());
 			FFT fft( extract_fft_leng);
-			fft.fft( input.begin() + pk.pos_left, time_chunk.begin());
+            fft.fft( input.data() + pk.pos_left, time_chunk.data());
 			car.samples.insert( car.samples.end(), time_chunk.begin(), time_chunk.end());
-			carriers.push_back( car)
+            carriers.push_back( car);
         }
 		
 		return carriers;
