@@ -132,7 +132,8 @@ private:
         for( const Peak &pk : peaks) {
 			Carrier car;
             // car.rel_freq =
-            // car.rel_band_width =
+            car.rel_band_width = static_cast<double>( pk.pos_right - pk.pos_left) / static_cast<double>( fft_leng);
+            car.rel_freq = static_cast<double>( pk.pos_left) + car.rel_band_width * 0.5;
             car.start_time = std::chrono::system_clock::now();
 
             // estimate extract_fft_leng of necessary extraction window with the following requirements
