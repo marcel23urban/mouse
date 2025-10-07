@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.14)
 project(mouse VERSION 1.0 LANGUAGES CXX)
 
 # Enable C++17
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 #set(CMAKE_PREFIX_PATH "/home/hans/Qt/6.8.1/gcc_64/lib/cmake")
