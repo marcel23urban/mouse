@@ -4,7 +4,10 @@
 #include <vector>
 #include <complex>
 #include <execution>
+#include <fstream>
 #include <chrono>
+#include <format>
+
 
 // provides Interface
 #include "baseprocessor.hpp"
@@ -21,6 +24,7 @@
 
 /// @brief holds one signal and its metadata
 struct Carrier {
+    bool active;
     double origin_freq;     // [Hz]
     double rel_freq;        // bins
     double samp_rate;       // [HZ]
@@ -77,11 +81,18 @@ private:
 #endif
             // extract peaks as carriers
             std::vector<Carrier> carriers;
-            carriers = extractCarriers( _buffer_fft, peaks);
+            carriers = ddcCarriers( _buffer_fft, peaks);
 
-            // check for previsous carriers in range and append if match 
+            // set all current carriers to false for further notice
+            // handle inactive carriers later on
+            for( auto &carrier : _carriers)
+                carrier.active = false;
+            // check for previsous carriers in range and append them if match
             for( auto &carrier : carriers)
                 checkForCarriersIdent( carrier);
+
+            // extract all inactive carriers to file and pop from queue
+            extractFinishedCarriers();
 
             // overlapped: step just a part of the fft size forward to prevent side effects
             buffer_consumed += _overl_step;
@@ -101,8 +112,11 @@ private:
 
                 if(    signal.rel_freq < carrier.rel_freq + carrier.rel_band_width * .1
                     && signal.rel_freq > carrier.rel_freq - carrier.rel_band_width * .1) {
-                    std::cerr << signal.rel_freq << " :: " << carrier.rel_freq << std::endl;
+                    std::cerr << "ident true for: "<< signal.rel_freq << " :: " << carrier.rel_freq << std::endl;
 
+                    if( carrier.active)
+                        std::cerr << "carrier already active, possible overlap" << std::endl;
+                    carrier.active = true;
                     // already existing carrier - only add samples
                     carrier.samples.insert( carrier.samples.end(),
                                    signal.samples.begin(), signal.samples.end());
@@ -118,13 +132,13 @@ private:
         }
     }
 
-    /// @brief extract time signal from given frequency vector, therefor estimate
-    /// extraction fft_leng and low-pass filter through detected peaks
+    /// @brief Direct Down Convert Carriers: extract time signal from given frequency vector,
+    /// therefor estimate extraction fft_leng and low-pass filter through detected peaks
     /// @param input fft vector
     /// @param peaks to corresponding frequency vector
     /// @return Carriers same leng as peaks
     std::vector<Carrier>
-    extractCarriers( std::vector<std::complex<float>> &input,
+    ddcCarriers( std::vector<std::complex<float>> &input,
                      const std::vector<Peak> &peaks, uint64_t rel_invers_overlap = 4) {
         std::vector<Carrier> carriers;
         carriers.reserve( peaks.size());
@@ -158,6 +172,20 @@ private:
 		return carriers;
     }
 
+    /// @brief Write out finished carriers to predefined filepath and erase it
+    void extractFinishedCarriers( ) {
+        for( auto carrier =_carriers.begin(); carrier != _carriers.end(); ) {
+            if( carrier->active)
+                carrier++;
+            else {
+                std::ofstream out( _out_path + std::format("{:%Y_%m_%d_%H_%M_%S}", carrier->start_time) , std::ios::binary);
+                out.write( reinterpret_cast< char*>( carrier->samples.data()), carrier->samples.size() * sizeof( std::complex<float>));
+                out.close();
+                _carriers.erase( carrier);
+            }
+        }
+    }
+
     uint64_t _psd_cnt, _psd_leng, _psd_avg, _threshold_db, _rel_inv_overl,
         _overl_step;
 
@@ -167,10 +195,12 @@ private:
     std::vector<struct Carrier> _carriers;
     std::atomic_bool _is_processing;
     ConditionSafeQueue<std::complex<float>> _puff;
+    std::string _out_path;
 
     FFT _fft;
     FFTWindow _win;
     LowPassFilter _lpf;
+
 };
 
 #endif // CARRIERPROCESSING_H
