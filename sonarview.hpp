@@ -116,19 +116,20 @@ protected:
     }
 
 public:
-    Marker() : _x_a( 0) {}
+    Marker() : _x_a( 0), _x_b( 0) {}
 
     void setPosA( int32_t x){ _x_a = x;}
+    void setPosB( int32_t x){ _x_b = x;}
 
     void draw( QImage *image) {
         QPainter qpaint(image);
         qpaint.setPen( QPen( Qt::green));
 
         qpaint.drawLine( _x_a, image->height(), _x_a, 0);
-        qpaint.drawText( _x_a + 5, image->height() * 0.9, "a");
+        qpaint.drawText( _x_a + 5, static_cast<int>( image->height() * 0.9), "a");
 
         qpaint.drawLine( _x_b, image->height(), _x_b, 0);
-        qpaint.drawText( _x_b + 5, image->height() * 0.9, "a");
+        qpaint.drawText( _x_b + 5, static_cast<int>( image->height() * 0.9), "b");
     }
 
 private:
@@ -140,12 +141,12 @@ private:
 class Axis : public QObject {
     Q_OBJECT
 
-    int32_t _center_freq, _bandwidth;
 public:
     Axis() {}
 
     /// @brief raws Axis on an Image
     void draw( QImage *image, float rel_y_pos = 0.9, float rel_size = 0.05) {
+        if( ! image) return;
         QPainter qpaint( image);
         qpaint.setPen( QPen( Qt::black));
 
@@ -163,6 +164,8 @@ public:
 public slots:
     void chaneCenterFreq( int32_t freq) { _center_freq = freq;}
     void setBandwidth( int32_t bandwidth) { _bandwidth = bandwidth;}
+private:
+    int32_t _center_freq, _bandwidth;
 };
 
 
@@ -177,65 +180,129 @@ class Waterfall : public QWidget {
 class Sonarview : public QWidget{
     Q_OBJECT
 
-    ConditionSafeQueue<std::complex<float>> _puff;
-    std::vector<std::complex<float>> _input_buf, _buf_fft, _buf_fft_2;
-    std::vector<float> _buf_fft_abs, _sonat;
+public:
+    explicit Sonarview( uint64_t fft_exp = 10) : _spectrogramm(nullptr),
+        _psd(nullptr), _current_line(0), _is_processing(false), _fft(nullptr),
+        _draw_upsidedown(true), _avg(nullptr) {
 
-    uint64_t _file_byte_size;
-    QPainter* _painter;
-    QImage *_spectrogramm, *_psd;
-    QPixmap _pixmap;
-    QSplitter *_qs_splitter;
-    QLabel *_ql_psd,
-           *_ql_spec;
+        setFFTExp( fft_exp);
+        _buf_fft.resize( _fft->leng());
+        _buf_fft_abs.resize( _fft->leng());
+        _avg = new Tools::MovingAverage<float>( 5);
 
-    std::fstream _file;
-    uint64_t _chunk_leng;
-    uint64_t _pos_overlap;
-    uint64_t _current_line;
-    uint64_t _visible_rows;
+        _qs_splitter = new QSplitter( this);
+        _qs_splitter->setOrientation( Qt::Vertical);
+        connect( _qs_splitter, &QSplitter::splitterMoved, this, &Sonarview::rescaleLabels);
 
-    std::atomic_bool _is_processing;
+        _ql_spec = new QLabel( this);
+        _ql_spec->setScaledContents( true);
+        _ql_psd = new QLabel( this);
+        _ql_psd->setScaledContents( true);
 
-    std::thread _proc;
-    QMutex imageMutex;
+        _qs_splitter->addWidget( _ql_psd);
+        _qs_splitter->addWidget( _ql_spec);
+        _qs_splitter->setStretchFactor( 0, 1);
+        _qs_splitter->setStretchFactor( 1, 1);
 
-    FFT* _fft;
-    std::vector<std::ifstream> _file_reader;
-    int _mode;
+        QVBoxLayout *qvbl_main = new QVBoxLayout;
+        qvbl_main->addWidget( _qs_splitter);
+        setLayout( qvbl_main);
+        setSizePolicy( QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
 
-    bool _draw_upsidedown;
+        {
+            QMutexLocker locker( &imageMutex);
+            if( _spectrogramm && _psd) {
+                _ql_spec->setPixmap( QPixmap::fromImage( _spectrogramm->copy(
+                    0, getLine(), _spectrogramm->width(), _spectrogramm->height() / 2)));
+                _ql_psd->setPixmap( QPixmap::fromImage( *_psd));
+            }
+        }
+    }
+    ~Sonarview() {
+        stopProcessing();
+        QMutexLocker locker( &imageMutex);
+        delete _fft; delete _avg;
+    }
 
-    Tools::MovingAverage<float> *_avg;
 
+    void startProcessing() {
+        if( _is_processing) throw std::runtime_error("start a thread which is allready running");
+        _is_processing = true;
+        _proc = std::thread( &Sonarview::process, this);
+    }
 
-//    void
-//    resizeEvent( QResizeEvent *re) override {
-//        Q_UNUSED( re);
-//        update();
-//    }
+    void stopProcessing() {
+        if( ! _is_processing) return;
+        _is_processing = false;
+        if( _proc.joinable())
+            _proc.join();
+    }
 
+    // Reset der aktuellen fft
+    void
+    setFFTExp( const uint64_t fft_exp) {
+        uint64_t leng = 1 << fft_exp;
+        if( _fft) delete _fft;
+        _fft = new FFT( leng);
+        _buf_fft.resize( leng);
+        _buf_fft_abs.resize( leng);
+        _pos_overlap = leng / 4;
+        setRows( 480);
+    }
 
-//        Q_UNUSED( qpe)
-//        QPainter paint(this);
-//        QMutexLocker locker(&imageMutex);
+    /// ...push data to buffer
+	/// ensure buffer is not overfilled , and input.size() matches fft::leng
+    void dataIn( const std::vector<std::complex<float>> &input) {
+        if( _puff.size() < 1) {
+            std::vector<std::complex<float>> tmp = input;
+            tmp.resize(_fft->leng(), std::complex<float>( .0 , .0));
+            _puff.push( tmp);
+        }
+    }
 
-//        if( _draw_upsidedown) {
+    /// @brief Setzt die Anzahl der ffts ueber die gemittelt wird
+    void setAverage( uint64_t avg) {_avg->setLeng( avg);}
 
-//        }
-//        // obere Haelfte
-//        paint.drawImage( 0, 0, _spectrogramm->copy(0, getLine(), _spectrogramm->width(), _spectrogramm->height() / 2)
-//                                 .scaled( this->size().width(),
-//                                          static_cast<int>( this->size().height() / 2),
-//                                          Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+    Axis _axis;
+    Marker _marker;
 
-//        // unterer Haelfte
-//        paint.drawImage( 0, static_cast<int>( this->size().height() / 2),
-//                        _psd->scaled( this->size().width(),
-//                                      static_cast<int>( this->size().height() / 2),
-//                                      Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
-//    }
+public slots:
+    void redraw() {
+        this->repaint();
+    }
 
+private slots:
+    // passt die Pixmaps der tatsaechlichen Anzeige (Labels) an
+    void rescaleLabels() {
+        QMutexLocker locker( &imageMutex);
+
+        // Kopie des Spektrogramm auf die Fenstergroesse anpassen
+        QImage tmp = _spectrogramm->copy( 0, getLine(), _spectrogramm->width(),
+                        _spectrogramm->height() / 2).scaled(_ql_spec->size(),
+                                 Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+        // Wasserfalldiagramm zeichnen
+        if( _draw_upsidedown) { tmp.mirror( false, true);}
+        _marker.draw( &tmp);
+        _ql_spec->setPixmap( QPixmap::fromImage( tmp));
+
+        // scales psd to label::size
+        QImage psd = _psd->scaled( _ql_psd->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+        _marker.draw( &psd);
+        _axis.draw( &psd);
+
+        _ql_psd->setPixmap( QPixmap::fromImage( psd));
+    }
+
+protected:
+
+    void mousePressEvent(QMouseEvent *event) override {
+        if(event->button() & Qt::LeftButton) {
+            _marker.setPosA( event->pos().x());
+        }
+    }
+private:
     /// @brief Fuegt dem Sonargramm eine FFT Reihe hinzu
     /// @param input fft magnitudes in 10*log10
     void
@@ -264,13 +331,14 @@ class Sonarview : public QWidget{
     /// @param input 10*log10 magnitudes
     void
     addPSDToImage( const std::vector<float> &input) {
+        if( ! _psd) return;
         QPainter qpaint( _psd);
         qpaint.setPen( QPen( Qt::black));
 
         std::vector<int> tmp( input.size());
         int height = _psd->height();
-        std::transform( std::execution::par_unseq, input.begin(), input.end(), tmp.begin(), 
-		        [ height]( float val) { return static_cast<int>( height * (val-15) / -45.);});
+        std::transform( std::execution::par_unseq, input.begin(), input.end(), tmp.begin(),
+                       [ height]( float val) { return static_cast<int>( height * (val-15) / -45.);});
 
         for( uint64_t w = 0; w < tmp.size() - 1; ++w) {
             qpaint.drawLine( w, tmp.at( w), w + 1, tmp.at( w + 1));
@@ -280,11 +348,15 @@ class Sonarview : public QWidget{
     /// @brief Sets the amount of rows in the QImage
     void
     setRows( uint64_t rows = 300) {
-        if( _spectrogramm)
-            delete _spectrogramm;
+        QMutexLocker locker( &imageMutex);
+
         _visible_rows = rows;
-        _spectrogramm = new QImage( _fft->leng(), 2 * _visible_rows, QImage::Format_ARGB32);
         _current_line = rows;
+
+        _spectrogramm = std::make_unique<QImage>( _fft->leng(), 2 * _visible_rows, QImage::Format_ARGB32);
+        _spectrogramm->fill( Qt::white);
+        _psd = std::make_unique<QImage>( _fft->leng(), static_cast<uint64_t>( _visible_rows),
+                          QImage::Format_ARGB32);
     }
 
     /// gibt die aktuell Zeile an, auf die das PSD gezeichnet wird
@@ -301,7 +373,7 @@ class Sonarview : public QWidget{
         return 0;
     }
 
-    /// @brief processes data from _input_buf as long as there are any 
+    /// @brief processes data from _input_buf as long as there are any
     ///        -> wird als thread ausgef
     void process() {
         std::vector<std::complex<float>> data;
@@ -320,10 +392,10 @@ class Sonarview : public QWidget{
                 _psd->fill( Qt::white);
 
                 // push result to set images
-                 _avg->push( _buf_fft_abs);
-                 addLineToSpectrogram( _avg->getAverage());
-                 addPSDToImage( _avg->getAverage());
-                 rescaleLabels();
+                _avg->push( _buf_fft_abs);
+                addLineToSpectrogram( _avg->getAverage());
+                addPSDToImage( _avg->getAverage());
+                rescaleLabels();
 
                 // addLineToSpectrogram( _buf_fft_abs);
                 // addPSDToImage( _buf_fft_abs);
@@ -343,133 +415,40 @@ class Sonarview : public QWidget{
     /// @brief setzt die Zoomstufe auf den Graphen
     void setZoom();
 
-public:
-
-    Axis _axis;
-    Marker _marker;
-
-    Sonarview( uint64_t fft_exp = 10) : _spectrogramm( nullptr), _current_line( 0), _fft( nullptr),
-        _pos_overlap( 0 ),_visible_rows( 0), _is_processing( false), _draw_upsidedown( true) {
-
-        setFFTExp( fft_exp);
-        _buf_fft.resize( _fft->leng());
-        _buf_fft_abs.resize( _fft->leng());
-
-        _avg = new Tools::MovingAverage<float>( 5);
-
-        _qs_splitter = new QSplitter();
-        _qs_splitter->setOrientation( Qt::Vertical);
-        connect( _qs_splitter, &QSplitter::splitterMoved, this, &Sonarview::rescaleLabels);
-
-        _ql_spec = new QLabel;
-        _ql_spec->setScaledContents( true);
-
-        _ql_psd = new QLabel;
-        _ql_psd->setScaledContents( true);
-
-        _qs_splitter->addWidget( _ql_psd);
-        _qs_splitter->addWidget( _ql_spec);
-
-        _qs_splitter->setStretchFactor( 0, 1);
-        _qs_splitter->setStretchFactor( 1, 1);
-
-        _ql_spec->setPixmap( QPixmap::fromImage( _spectrogramm->copy(
-                            0, getLine(), _spectrogramm->width(), _spectrogramm->height() / 2)));
-        _ql_psd->setPixmap( QPixmap::fromImage( *_psd));
-
-        QVBoxLayout *qvbl_main = new QVBoxLayout;
-        qvbl_main->addWidget( _qs_splitter);
-        setLayout( qvbl_main);
-
-        setSizePolicy( QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
-    }
-    ~Sonarview() {
-    }
 
 
-    void startProcessing() {
-        if( _is_processing)
-            throw std::runtime_error("FEHLER start a thread which is allready running");
-        _is_processing = true;
-        _proc = std::thread( &Sonarview::process, this);
-    }
+    ConditionSafeQueue<std::complex<float>> _puff;
+    std::vector<std::complex<float>> _input_buf, _buf_fft, _buf_fft_2;
+    std::vector<float> _buf_fft_abs, _sonat;
 
-    void stopProcessing() {
-        if( ! _is_processing) return;
-        _is_processing = false;
-        if( _proc.joinable())
-            _proc.join();
-    }
+    uint64_t _file_byte_size;
+    QPainter* _painter;
+    std::unique_ptr<QImage> _spectrogramm, _psd;
+    QPixmap _pixmap;
+    QSplitter *_qs_splitter;
+    QLabel *_ql_psd,
+        *_ql_spec;
 
-    // Reset der aktuellen fft
-    void
-    setFFTExp( const uint64_t fft_exp) {
-        uint64_t leng = 1 << fft_exp;
-        uint64_t pow = Tools::nextPow2( leng);
-        if( fft_exp != pow)
-            throw std::invalid_argument("FEHLER setFFTExp() leng not a power of two");
-        if( _fft) delete _fft;
-        _fft = new FFT( leng);
-        _input_buf.reserve( 32 * _fft->leng());
-        _buf_fft.resize( _fft->leng());
-        _buf_fft_abs.resize( _fft->leng());
-        _pos_overlap = _fft->leng() / 4;
-        setRows( 480);
-        _spectrogramm->fill( Qt::white);
-        _psd = new QImage( _fft->leng(), static_cast<uint64_t>( _visible_rows),
-                          QImage::Format_ARGB32);
+    std::fstream _file;
+    uint64_t _chunk_leng;
+    uint64_t _pos_overlap;
+    uint64_t _current_line;
+    uint64_t _visible_rows;
 
-    }
+    std::atomic_bool _is_processing;
 
-    /// ...push data to buffer
-	/// ensure buffer is not overfilled , and input.size() matches fft::leng
-    void dataIn( const std::vector<std::complex<float>> &input) {
-        if( _puff.size() < 1) {
-            std::vector<std::complex<float>> tmp = input;
-            tmp.resize(_fft->leng(), std::complex<float>( .0 , .0));
-            _puff.push( tmp);
-        }
-    }
+    std::thread _proc;
+    QMutex imageMutex;
 
-    /// @brief Setzt die Anzahl der ffts ueber die gemittelt wird
-    void setAverage( uint64_t avg) {_avg->setLeng( avg);}
+    FFT* _fft;
+    std::vector<std::ifstream> _file_reader;
+    int _mode;
 
-public slots:
-    void redraw() {
-        this->repaint();
-    }
+    bool _draw_upsidedown;
 
-private slots:
-    // passt die Pixmaps der tatsaechlichen Anzeige (Labels) an
-    void rescaleLabels() {
-        // Kopie des Spektrogramm auf die Fenstergroesse anpassen
-        QImage tmp = _spectrogramm->copy( 0, getLine(), _spectrogramm->width(),
-                        _spectrogramm->height() / 2).scaled(_ql_spec->size(),
-                                 Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    Tools::MovingAverage<float> *_avg;
 
-        // Wasserfalldiagramm zeichnen
-        if( _draw_upsidedown) {
-            tmp.mirror( false, true);
-        }
-        _marker.draw( &tmp);
-        _ql_spec->setPixmap( QPixmap::fromImage( tmp));
 
-        // scales psd to label::size
-        QImage psd = _psd->scaled( _ql_psd->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-
-        _marker.draw( &psd);
-        _axis.draw( &psd);
-
-        _ql_psd->setPixmap( QPixmap::fromImage( psd));
-    }
-
-protected:
-
-    void mousePressEvent(QMouseEvent *event) override {
-        if(event->button() & Qt::LeftButton) {
-            _marker.setPosA( event->pos().x());
-        }
-    }
 };
 
 #endif // Sonarview_NEW_H
